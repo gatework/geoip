@@ -6,7 +6,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
+
+var remoteClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
 
 func GetRemoteURLContent(url string) ([]byte, error) {
 	body, err := GetRemoteURLReader(url)
@@ -19,7 +24,7 @@ func GetRemoteURLContent(url string) ([]byte, error) {
 }
 
 func GetRemoteURLReader(url string) (io.ReadCloser, error) {
-	resp, err := http.Get(url)
+	resp, err := remoteClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
