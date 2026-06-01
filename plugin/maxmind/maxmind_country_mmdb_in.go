@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/oschwald/maxminddb-golang/v2"
 )
@@ -50,7 +50,7 @@ func (g *GeoLite2CountryMMDBIn) Input(container lib.Container) (lib.Container, e
 	var content []byte
 	var err error
 	switch {
-	case strings.HasPrefix(strings.ToLower(g.URI), "http://"), strings.HasPrefix(strings.ToLower(g.URI), "https://"):
+	case lib.IsRemoteURL(g.URI):
 		content, err = lib.GetRemoteURLContent(g.URI)
 	default:
 		content, err = os.ReadFile(g.URI)

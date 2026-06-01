@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 )
 
 const (
@@ -116,7 +116,7 @@ func (t *TextIn) Input(container lib.Container) (lib.Container, error) {
 
 	case t.Name != "" && t.URI != "":
 		switch {
-		case strings.HasPrefix(strings.ToLower(t.URI), "http://"), strings.HasPrefix(strings.ToLower(t.URI), "https://"):
+		case lib.IsRemoteURL(t.URI):
 			err = t.walkRemoteFile(t.URI, t.Name, entries)
 		default:
 			err = t.walkLocalFile(t.URI, t.Name, entries)

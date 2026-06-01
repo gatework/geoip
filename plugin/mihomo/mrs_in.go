@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 	"github.com/klauspost/compress/zstd"
 	"go4.org/netipx"
 )
@@ -109,7 +109,7 @@ func (m *MRSIn) Input(container lib.Container) (lib.Container, error) {
 		err = m.walkDir(m.InputDir, entries)
 	case m.Name != "" && m.URI != "":
 		switch {
-		case strings.HasPrefix(strings.ToLower(m.URI), "http://"), strings.HasPrefix(strings.ToLower(m.URI), "https://"):
+		case lib.IsRemoteURL(m.URI):
 			err = m.walkRemoteFile(m.URI, m.Name, entries)
 		default:
 			err = m.walkLocalFile(m.URI, m.Name, entries)

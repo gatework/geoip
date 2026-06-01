@@ -5,20 +5,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 func GetRemoteURLContent(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+	body, err := GetRemoteURLReader(url)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get remote content -> %s: %s", url, resp.Status)
-	}
-
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(body)
 }
 
 func GetRemoteURLReader(url string) (io.ReadCloser, error) {
@@ -28,10 +25,17 @@ func GetRemoteURLReader(url string) (io.ReadCloser, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
 		return nil, fmt.Errorf("failed to get remote content -> %s: %s", url, resp.Status)
 	}
 
 	return resp.Body, nil
+}
+
+func IsRemoteURL(uri string) bool {
+	uri = strings.TrimSpace(uri)
+	return (len(uri) >= len("http://") && strings.EqualFold(uri[:len("http://")], "http://")) ||
+		(len(uri) >= len("https://") && strings.EqualFold(uri[:len("https://")], "https://"))
 }
 
 func GetIgnoreIPType(onlyIPType IPType) IgnoreIPOption {

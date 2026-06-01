@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 )
 
 const (
@@ -165,7 +165,7 @@ func (g *GeoLite2ASNCSVIn) process(file string, entries map[string]*lib.Entry) e
 	var f io.ReadCloser
 	var err error
 	switch {
-	case strings.HasPrefix(strings.ToLower(file), "http://"), strings.HasPrefix(strings.ToLower(file), "https://"):
+	case lib.IsRemoteURL(file):
 		f, err = lib.GetRemoteURLReader(file)
 	default:
 		f, err = os.Open(file)

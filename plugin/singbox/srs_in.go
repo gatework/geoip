@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 	"github.com/sagernet/sing-box/common/srs"
 )
 
@@ -103,7 +103,7 @@ func (s *SRSIn) Input(container lib.Container) (lib.Container, error) {
 		err = s.walkDir(s.InputDir, entries)
 	case s.Name != "" && s.URI != "":
 		switch {
-		case strings.HasPrefix(strings.ToLower(s.URI), "http://"), strings.HasPrefix(strings.ToLower(s.URI), "https://"):
+		case lib.IsRemoteURL(s.URI):
 			err = s.walkRemoteFile(s.URI, s.Name, entries)
 		default:
 			err = s.walkLocalFile(s.URI, s.Name, entries)

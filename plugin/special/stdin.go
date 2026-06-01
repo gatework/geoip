@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 )
 
 const (

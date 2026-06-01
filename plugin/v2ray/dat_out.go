@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 	"google.golang.org/protobuf/proto"
 )
 

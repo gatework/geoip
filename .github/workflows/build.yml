@@ -1,8 +1,9 @@
-name: Build geoip files
+name: Build GeoIP files
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 0 * * 4"
+    - cron: "0 0 * * *"
   push:
     branches:
       - master
@@ -13,110 +14,160 @@ on:
       - "*.md"
 permissions:
   contents: write
+
+concurrency:
+  group: geoip-build-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      OUTPUT_DIR: output
     steps:
       - name: Checkout codebase
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v6.4.0
         with:
           go-version-file: ./go.mod
+          cache-dependency-path: ./go.sum
 
       - name: Set variables
         run: |
-          echo "TAG_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "RELEASE_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-        shell: bash
+          release_name="$(date -u +%Y%m%d%H%M)"
+          echo "TAG_NAME=${release_name}" >> "$GITHUB_ENV"
+          echo "RELEASE_NAME=${release_name}" >> "$GITHUB_ENV"
+
+      - name: Validate MaxMind license
+        env:
+          LICENSE_KEY: ${{ secrets.MAXMIND_GEOLITE2_LICENSE }}
+        run: |
+          if [[ -z "${LICENSE_KEY}" ]]; then
+            echo "::error::MAXMIND_GEOLITE2_LICENSE secret is required."
+            exit 1
+          fi
+
+      - name: Run tests
+        run: go test ./...
 
       - name: Download GeoLite2 databases
         env:
           LICENSE_KEY: ${{ secrets.MAXMIND_GEOLITE2_LICENSE }}
         run: |
-          mkdir -p output
-          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&license_key=${LICENSE_KEY}&suffix=tar.gz" -o ./output/GeoLite2-ASN.tar.gz
-          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN-CSV&license_key=${LICENSE_KEY}&suffix=zip" -o ./output/GeoLite2-ASN-CSV.zip
-          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=${LICENSE_KEY}&suffix=tar.gz" -o ./output/GeoLite2-Country.tar.gz
-          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=${LICENSE_KEY}&suffix=zip" -o ./output/GeoLite2-Country-CSV.zip
+          install -d "${OUTPUT_DIR}"
+
+          download_geolite2() {
+            local edition="$1"
+            local suffix="$2"
+            local output="$3"
+            curl --fail --location --silent --show-error --retry 3 --retry-delay 5 --connect-timeout 20 \
+              "https://download.maxmind.com/app/geoip_download?edition_id=${edition}&license_key=${LICENSE_KEY}&suffix=${suffix}" \
+              --output "${OUTPUT_DIR}/${output}"
+            test -s "${OUTPUT_DIR}/${output}"
+          }
+
+          download_geolite2 "GeoLite2-ASN" "tar.gz" "GeoLite2-ASN.tar.gz"
+          download_geolite2 "GeoLite2-ASN-CSV" "zip" "GeoLite2-ASN-CSV.zip"
+          download_geolite2 "GeoLite2-Country" "tar.gz" "GeoLite2-Country.tar.gz"
+          download_geolite2 "GeoLite2-Country-CSV" "zip" "GeoLite2-Country-CSV.zip"
 
       - name: Prepare GeoLite2 databases
         run: |
-          cp ./output/{*.gz,*.zip} ./
-          unzip GeoLite2-Country-CSV.zip
-          unzip GeoLite2-ASN-CSV.zip
-          tar -xvzf GeoLite2-Country.tar.gz
-          tar -xvzf GeoLite2-ASN.tar.gz
+          cp "${OUTPUT_DIR}"/*.{gz,zip} ./
+          unzip -q GeoLite2-Country-CSV.zip
+          unzip -q GeoLite2-ASN-CSV.zip
+          tar -xzf GeoLite2-Country.tar.gz
+          tar -xzf GeoLite2-ASN.tar.gz
 
-          cp GeoLite2-Country_*/*.mmdb ./output/
-          cp GeoLite2-ASN_*/*.mmdb ./output/
-          cp GeoLite2-Country-CSV_*/{GeoLite2-Country-Blocks-*,GeoLite2-Country-Locations-en,GeoLite2-Country-Locations-zh-CN}.csv ./output/
-          cp GeoLite2-ASN-CSV_*/*.csv ./output/
+          cp GeoLite2-Country_*/*.mmdb "${OUTPUT_DIR}/"
+          cp GeoLite2-ASN_*/*.mmdb "${OUTPUT_DIR}/"
+          cp GeoLite2-Country-CSV_*/{GeoLite2-Country-Blocks-*,GeoLite2-Country-Locations-en,GeoLite2-Country-Locations-zh-CN}.csv "${OUTPUT_DIR}/"
+          cp GeoLite2-ASN-CSV_*/*.csv "${OUTPUT_DIR}/"
 
-          mkdir -p geolite2
+          install -d geolite2
           cp GeoLite2-Country-CSV_*/*.csv ./geolite2/
           cp GeoLite2-ASN-CSV_*/*.csv ./geolite2/
 
       - name: Build geoip files
         run: |
-          go build ./
+          go build -trimpath ./
           ./geoip convert -c ./config.json
 
       - name: Verify mmdb files
         run: |
-          cd ./output || exit 1
-          go install -v github.com/maxmind/mmdbverify@latest
-          for name in $(ls *.mmdb); do
-            $(go env GOPATH)/bin/mmdbverify -file ${name}
+          cd "${OUTPUT_DIR}"
+          go install -v github.com/maxmind/mmdbverify@v1.0.0
+          shopt -s nullglob
+          mmdb_files=(./*.mmdb)
+          if (( ${#mmdb_files[@]} == 0 )); then
+            echo "::error::No mmdb files were generated."
+            exit 1
+          fi
+          for name in "${mmdb_files[@]}"; do
+            "$(go env GOPATH)/bin/mmdbverify" -file "${name}"
           done
 
-      - name: Generate sha256 checksum for dat files
+      - name: Generate sha256 checksums
         run: |
-          cd ./output || exit 1
-          for name in $(ls *.dat); do
-            sha256sum ${name} > ./${name}.sha256sum
-          done
-
-      - name: Generate sha256 checksum for mmdb files
-        run: |
-          cd ./output || exit 1
-          for name in $(ls *.mmdb); do
-            sha256sum ${name} > ./${name}.sha256sum
+          cd "${OUTPUT_DIR}"
+          shopt -s nullglob
+          for name in *.dat *.mmdb; do
+            sha256sum "${name}" > "${name}.sha256sum"
           done
 
       - name: Git push assets to "release" branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd output || exit 1
-          git init
+          cd "${OUTPUT_DIR}"
+          git init -b release
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b release
           git add -A
           git commit -m "${{ env.RELEASE_NAME }}"
-          git remote add geoip "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
-          git push -f -u geoip release
+          git remote add geoip "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force -u geoip release
 
       - name: Purge jsdelivr CDN
         run: |
-          cd output || exit 1
-          for file in $(ls); do
-            curl -i "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/${file}"
+          cd "${OUTPUT_DIR}"
+          shopt -s nullglob
+          for file in *; do
+            if ! curl --fail --location --silent --show-error --retry 3 "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@release/${file}" >/dev/null; then
+              echo "::warning::Failed to purge jsdelivr cache for ${file}"
+            fi
           done
 
       - name: Remove some files to avoid publishing to GitHub release
         run: |
-          rm -rf ./output/*.{gz,zip}
-          rm -rf ./output/GeoLite2-*.csv
-          rm -rf ./output/GeoLite2-*.mmdb
-          rm -rf ./output/GeoLite2-*.sha256sum
-          rm -rf ./output/{clash,dat,mrs,nginx,srs,surge,text}
+          rm -f "${OUTPUT_DIR}"/*.{gz,zip}
+          rm -f "${OUTPUT_DIR}"/GeoLite2-*.csv
+          rm -f "${OUTPUT_DIR}"/GeoLite2-*.mmdb
+          rm -f "${OUTPUT_DIR}"/GeoLite2-*.sha256sum
+          rm -rf "${OUTPUT_DIR}"/{clash,dat,mrs,nginx,srs,surge,text}
 
       - name: Upload files to GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create ${{ env.TAG_NAME }} --title "${{ env.RELEASE_NAME }}" ./output/*
+          cd "${OUTPUT_DIR}"
+          shopt -s nullglob
+          artifacts=(*)
+          if (( ${#artifacts[@]} == 0 )); then
+            echo "::error::No release artifacts remain after pruning."
+            exit 1
+          fi
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release delete "${TAG_NAME}" --yes --cleanup-tag
+          fi
+          gh release create "${TAG_NAME}" --title "${RELEASE_NAME}" --notes "Automated GeoIP build ${RELEASE_NAME}." "${artifacts[@]}"

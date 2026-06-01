@@ -3,6 +3,7 @@ package lib
 import (
 	"fmt"
 	"net/netip"
+	"sort"
 	"strings"
 
 	"go4.org/netipx"
@@ -50,13 +51,23 @@ func (c *container) Len() int {
 }
 
 func (c *container) Loop() <-chan *Entry {
-	ch := make(chan *Entry, 300)
-	go func() {
-		for _, val := range c.entries {
-			ch <- val
-		}
+	ch := make(chan *Entry, c.Len())
+	if !c.isValid() {
 		close(ch)
-	}()
+		return ch
+	}
+
+	names := make([]string, 0, len(c.entries))
+	for name := range c.entries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		ch <- c.entries[name]
+	}
+	close(ch)
+
 	return ch
 }
 
@@ -241,16 +252,20 @@ func (c *container) lookup(addrOrPrefix any, iptype IPType, searchList ...string
 		}
 
 		var ipset *netipx.IPSet
-		var err error
+		if err := entry.buildIPSet(); err != nil {
+			return nil, false, err
+		}
 		switch iptype {
 		case IPv4:
-			ipset, err = entry.GetIPv4Set()
+			if !entry.hasIPv4Set() {
+				continue
+			}
+			ipset = entry.ipv4Set
 		case IPv6:
-			ipset, err = entry.GetIPv6Set()
-		}
-
-		if err != nil {
-			return nil, false, err
+			if !entry.hasIPv6Set() {
+				continue
+			}
+			ipset = entry.ipv6Set
 		}
 
 		switch addrOrPrefix := addrOrPrefix.(type) {

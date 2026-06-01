@@ -1,4 +1,4 @@
-module github.com/Loyalsoldier/geoip
+module github.com/gatework/geoip
 
 go 1.25.0
 

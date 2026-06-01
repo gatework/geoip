@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 )
 
 const (
@@ -149,7 +149,7 @@ func (g *GeoLite2CountryCSVIn) getCountryCode() (map[string]string, error) {
 	var f io.ReadCloser
 	var err error
 	switch {
-	case strings.HasPrefix(strings.ToLower(g.CountryCodeFile), "http://"), strings.HasPrefix(strings.ToLower(g.CountryCodeFile), "https://"):
+	case lib.IsRemoteURL(g.CountryCodeFile):
 		f, err = lib.GetRemoteURLReader(g.CountryCodeFile)
 	default:
 		f, err = os.Open(g.CountryCodeFile)
@@ -203,7 +203,7 @@ func (g *GeoLite2CountryCSVIn) process(file string, ccMap map[string]string, ent
 	var f io.ReadCloser
 	var err error
 	switch {
-	case strings.HasPrefix(strings.ToLower(file), "http://"), strings.HasPrefix(strings.ToLower(file), "https://"):
+	case lib.IsRemoteURL(file):
 		f, err = lib.GetRemoteURLReader(file)
 	default:
 		f, err = os.Open(file)

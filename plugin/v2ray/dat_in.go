@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -88,7 +88,7 @@ func (g *GeoIPDatIn) Input(container lib.Container) (lib.Container, error) {
 	var err error
 
 	switch {
-	case strings.HasPrefix(strings.ToLower(g.URI), "http://"), strings.HasPrefix(strings.ToLower(g.URI), "https://"):
+	case lib.IsRemoteURL(g.URI):
 		err = g.walkRemoteFile(g.URI, entries)
 	default:
 		err = g.walkLocalFile(g.URI, entries)

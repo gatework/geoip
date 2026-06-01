@@ -37,7 +37,7 @@ func (i *instance) InitConfig(configFile string) error {
 	var content []byte
 	var err error
 	configFile = strings.TrimSpace(configFile)
-	if strings.HasPrefix(strings.ToLower(configFile), "http://") || strings.HasPrefix(strings.ToLower(configFile), "https://") {
+	if IsRemoteURL(configFile) {
 		content, err = GetRemoteURLContent(configFile)
 	} else {
 		content, err = os.ReadFile(configFile)
@@ -53,7 +53,10 @@ func (i *instance) InitConfigFromBytes(content []byte) error {
 	config := new(config)
 
 	// Support JSON with comments and trailing commas
-	content, _ = hujson.Standardize(content)
+	content, err := hujson.Standardize(content)
+	if err != nil {
+		return err
+	}
 
 	if err := json.Unmarshal(content, &config); err != nil {
 		return err

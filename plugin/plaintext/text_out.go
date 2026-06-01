@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/gatework/geoip/lib"
 )
 
 const (
